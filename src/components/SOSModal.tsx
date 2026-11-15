@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
+import { useModalAccessibility } from '../hooks/useModalAccessibility';
 import {
   ShieldAlert,
   Phone,
@@ -29,6 +30,8 @@ export const SOSModal: React.FC = () => {
   const [isCountingDown, setIsCountingDown] = useState<boolean>(true);
   const [resolutionNote, setResolutionNote] = useState<string>('Assistance received, situation stable.');
   const [showResolveForm, setShowResolveForm] = useState<boolean>(false);
+
+  const modalRef = useModalAccessibility(isSOSOpen, closeSOS);
 
   // When modal opens, start 5-second countdown if not already triggered
   useEffect(() => {
@@ -78,19 +81,27 @@ export const SOSModal: React.FC = () => {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-navy-950/85 backdrop-blur-md overflow-y-auto">
-      <div className="relative w-full max-w-2xl bg-navy-900 border-2 border-rose-500 rounded-3xl shadow-glow-red overflow-hidden animate-in fade-in zoom-in-95 duration-200 my-8">
+      <div
+        ref={modalRef}
+        tabIndex={-1}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="sos-modal-title"
+        aria-describedby="sos-modal-desc"
+        className="relative w-full max-w-2xl bg-navy-900 border-2 border-rose-500 rounded-3xl shadow-glow-red overflow-hidden animate-in fade-in zoom-in-95 duration-200 my-8 focus:outline-none"
+      >
         
         {/* Modal Header */}
         <div className="bg-gradient-to-r from-rose-950 via-rose-900 to-navy-900 p-5 sm:p-6 border-b border-rose-500/40 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-rose-600 flex items-center justify-center text-white shadow-lg animate-pulse">
+            <div className="w-12 h-12 rounded-2xl bg-rose-600 flex items-center justify-center text-white shadow-lg animate-pulse" aria-hidden="true">
               <ShieldAlert className="w-7 h-7" />
             </div>
             <div>
-              <h2 className="text-xl sm:text-2xl font-black text-white tracking-wide flex items-center gap-2">
+              <h2 id="sos-modal-title" className="text-xl sm:text-2xl font-black text-white tracking-wide flex items-center gap-2">
                 EMERGENCY SOS SYSTEM
               </h2>
-              <p className="text-xs sm:text-sm text-rose-200 font-medium">
+              <p id="sos-modal-desc" className="text-xs sm:text-sm text-rose-200 font-medium">
                 Rapid Caregiver & Emergency Responder Protocol
               </p>
             </div>
@@ -98,8 +109,8 @@ export const SOSModal: React.FC = () => {
           
           <button
             onClick={closeSOS}
-            className="p-2 text-rose-300 hover:text-white rounded-xl hover:bg-rose-800/50 transition-colors"
-            aria-label="Close"
+            className="p-2 text-rose-300 hover:text-white rounded-xl hover:bg-rose-800/50 transition-colors focus:outline-none focus:ring-2 focus:ring-rose-400"
+            aria-label="Close Emergency SOS Dialog"
           >
             <X className="w-6 h-6" />
           </button>

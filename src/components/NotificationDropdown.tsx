@@ -69,11 +69,15 @@ export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ onCl
   };
 
   return (
-    <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-navy-900 border border-navy-750 rounded-2xl shadow-2xl z-50 overflow-hidden flex flex-col max-h-[85vh]">
+    <div
+      role="region"
+      aria-label="Notifications Panel"
+      className="absolute right-0 mt-2 w-80 sm:w-96 bg-navy-900 border border-navy-750 rounded-2xl shadow-2xl z-50 overflow-hidden flex flex-col max-h-[85vh]"
+    >
       {/* Header */}
       <div className="p-4 bg-navy-850 border-b border-navy-750 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Bell className="w-5 h-5 text-teal-400" />
+          <Bell className="w-5 h-5 text-teal-400" aria-hidden="true" />
           <h3 className="font-bold text-white text-base">Notifications</h3>
           {notifications.some(n => !n.read) && (
             <span className="px-2 py-0.5 text-xs font-bold rounded-full bg-teal-500/20 text-teal-300">
@@ -83,16 +87,20 @@ export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ onCl
         </div>
         <div className="flex items-center gap-1">
           <button
+            type="button"
             onClick={markAllNotificationsRead}
             title="Mark all as read"
-            className="p-1.5 text-slate-400 hover:text-teal-300 rounded hover:bg-navy-800 transition-colors"
+            aria-label="Mark all notifications as read"
+            className="p-1.5 text-slate-400 hover:text-teal-300 rounded hover:bg-navy-800 transition-colors focus:outline-none focus:ring-2 focus:ring-teal-400"
           >
             <CheckCheck className="w-4 h-4" />
           </button>
           <button
+            type="button"
             onClick={clearAllNotifications}
             title="Clear all notifications"
-            className="p-1.5 text-slate-400 hover:text-rose-400 rounded hover:bg-navy-800 transition-colors"
+            aria-label="Clear all notifications"
+            className="p-1.5 text-slate-400 hover:text-rose-400 rounded hover:bg-navy-800 transition-colors focus:outline-none focus:ring-2 focus:ring-rose-400"
           >
             <Trash2 className="w-4 h-4" />
           </button>
@@ -104,8 +112,9 @@ export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ onCl
         <div className="bg-navy-800/80 px-4 py-2 border-b border-navy-750 flex items-center justify-between text-xs">
           <span className="text-slate-300">Enable desktop dose alerts?</span>
           <button
+            type="button"
             onClick={requestNotificationPermission}
-            className="text-xs font-bold text-teal-300 hover:text-teal-200 bg-teal-500/20 px-2 py-0.5 rounded border border-teal-500/30 transition-colors"
+            className="text-xs font-bold text-teal-300 hover:text-teal-200 bg-teal-500/20 px-2 py-0.5 rounded border border-teal-500/30 transition-colors focus:outline-none focus:ring-2 focus:ring-teal-400"
           >
             Allow
           </button>
@@ -113,32 +122,41 @@ export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ onCl
       )}
 
       {/* Filter Tabs */}
-      <div className="flex items-center border-b border-navy-800 px-4 py-2 text-xs font-semibold gap-3 bg-navy-900">
+      <div role="tablist" aria-label="Filter notifications" className="flex items-center border-b border-navy-800 px-4 py-2 text-xs font-semibold gap-3 bg-navy-900">
         <button
+          type="button"
+          role="tab"
+          aria-selected={filter === 'all'}
           onClick={() => setFilter('all')}
-          className={`pb-1 ${filter === 'all' ? 'text-teal-300 border-b-2 border-teal-400' : 'text-slate-400 hover:text-slate-200'}`}
+          className={`pb-1 transition-colors focus:outline-none focus:ring-2 focus:ring-teal-400 rounded-t ${filter === 'all' ? 'text-teal-300 border-b-2 border-teal-400 font-bold' : 'text-slate-400 hover:text-slate-200'}`}
         >
           All ({notifications.length})
         </button>
         <button
+          type="button"
+          role="tab"
+          aria-selected={filter === 'unread'}
           onClick={() => setFilter('unread')}
-          className={`pb-1 ${filter === 'unread' ? 'text-teal-300 border-b-2 border-teal-400' : 'text-slate-400 hover:text-slate-200'}`}
+          className={`pb-1 transition-colors focus:outline-none focus:ring-2 focus:ring-teal-400 rounded-t ${filter === 'unread' ? 'text-teal-300 border-b-2 border-teal-400 font-bold' : 'text-slate-400 hover:text-slate-200'}`}
         >
           Unread ({notifications.filter(n => !n.read).length})
         </button>
       </div>
 
       {/* Notification List */}
-      <div className="overflow-y-auto divide-y divide-navy-800 flex-1">
+      <div className="overflow-y-auto divide-y divide-navy-800 flex-1" role="list">
         {displayed.length === 0 ? (
           <div className="p-8 text-center text-slate-400 text-sm">
-            <CheckCircle2 className="w-8 h-8 text-slate-600 mx-auto mb-2" />
+            <CheckCircle2 className="w-8 h-8 text-slate-600 mx-auto mb-2" aria-hidden="true" />
             No notifications in this view.
           </div>
         ) : (
           displayed.map((item) => (
-            <div
+            <button
+              type="button"
               key={item.id}
+              role="listitem"
+              aria-label={`Notification: ${item.title}. ${item.message}. ${item.read ? 'Read' : 'Unread'}`}
               onClick={() => {
                 markNotificationRead(item.id);
                 if (item.actionUrl === '#medications') {
@@ -149,11 +167,11 @@ export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ onCl
                   onClose();
                 }
               }}
-              className={`p-3.5 hover:bg-navy-850 cursor-pointer transition-colors flex items-start gap-3 ${
+              className={`w-full text-left p-3.5 hover:bg-navy-850 transition-colors flex items-start gap-3 focus:outline-none focus:ring-2 focus:ring-teal-400 focus:ring-inset ${
                 !item.read ? 'bg-navy-850/40' : ''
               }`}
             >
-              <div className="p-2 rounded-lg bg-navy-800 border border-navy-700 shrink-0 mt-0.5">
+              <div className="p-2 rounded-lg bg-navy-800 border border-navy-750 shrink-0 mt-0.5" aria-hidden="true">
                 {getIcon(item.type)}
               </div>
               <div className="flex-1 min-w-0">
@@ -175,9 +193,9 @@ export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ onCl
                 )}
               </div>
               {!item.read && (
-                <div className="w-2 h-2 rounded-full bg-teal-400 shrink-0 mt-1.5" />
+                <div className="w-2 h-2 rounded-full bg-teal-400 shrink-0 mt-1.5" aria-hidden="true" />
               )}
-            </div>
+            </button>
           ))
         )}
       </div>
@@ -185,8 +203,10 @@ export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ onCl
       {/* Footer */}
       <div className="p-3 bg-navy-850 border-t border-navy-750 text-center">
         <button
+          type="button"
           onClick={onClose}
-          className="text-xs text-slate-400 hover:text-white font-medium"
+          aria-label="Close Notifications Panel"
+          className="text-xs text-slate-400 hover:text-white font-medium focus:outline-none focus:ring-2 focus:ring-teal-400 px-3 py-1 rounded"
         >
           Close Panel
         </button>

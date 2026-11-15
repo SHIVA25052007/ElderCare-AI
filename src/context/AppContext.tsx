@@ -15,6 +15,7 @@ import {
 } from '../types';
 import { storageService, DATA_CHANGED_EVENT } from '../services/storage';
 import { audioService } from '../services/audioService';
+import { rbacService, Permission, AuthorizationResult } from '../services/rbacService';
 
 export type NavigationTab = 'dashboard' | 'medications' | 'appointments' | 'vitals' | 'care_circle' | 'medical_id';
 export type FontSize = 'normal' | 'large' | 'xlarge';
@@ -64,6 +65,8 @@ interface AppContextType {
 
   // Actions
   switchRole: (role: UserRole) => void;
+  hasPermission: (permission: Permission) => boolean;
+  authorizeAction: (permission: Permission) => AuthorizationResult;
   recordDose: (logId: string, status: DoseStatus, notes?: string) => void;
   addMedication: (med: Omit<Medication, 'id'>) => Medication;
   updateMedication: (id: string, updates: Partial<Medication>) => void;
@@ -178,20 +181,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     refreshData();
   };
 
+  const hasPermission = (permission: Permission): boolean => {
+    return rbacService.hasPermission(currentUser, permission);
+  };
+
+  const authorizeAction = (permission: Permission): AuthorizationResult => {
+    return rbacService.authorize(currentUser, permission);
+  };
+
   const addMed = (med: Omit<Medication, 'id'>) => {
-    const newMed = storageService.addMedication(med);
+    rbacService.assertPermission(currentUser, 'prescriptions:add');
+    const newMed = storageService.addMedication(med, currentUser);
     audioService.playReminderTone();
     refreshData();
     return newMed;
   };
 
   const updateMed = (id: string, updates: Partial<Medication>) => {
-    storageService.updateMedication(id, updates);
+    rbacService.assertPermission(currentUser, 'prescriptions:edit');
+    storageService.updateMedication(id, updates, currentUser);
     refreshData();
   };
 
   const deleteMed = (id: string) => {
-    storageService.deleteMedication(id);
+    rbacService.assertPermission(currentUser, 'prescriptions:delete');
+    storageService.deleteMedication(id, currentUser);
     refreshData();
   };
 
@@ -233,7 +247,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const updateProfile = (profile: Partial<SeniorProfile>) => {
-    storageService.updateSeniorProfile(profile);
+    if (profile.dnrStatus !== undefined) {
+      rbacService.assertPermission(currentUser, 'dnr:edit');
+    }
+    const isMedicalIdChange = profile.bloodType !== undefined ||
+      profile.allergies !== undefined ||
+      profile.chronicConditions !== undefined ||
+      profile.preferredHospital !== undefined;
+    if (isMedicalIdChange) {
+      rbacService.assertPermission(currentUser, 'medical_id:edit');
+    }
+    storageService.updateSeniorProfile(profile, currentUser);
     refreshData();
   };
 
@@ -322,6 +346,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         openAuthModal: () => setIsAuthModalOpen(true),
         closeAuthModal: () => setIsAuthModalOpen(false),
         switchRole,
+        hasPermission,
+        authorizeAction,
         recordDose,
         addMedication: addMed,
         updateMedication: updateMed,

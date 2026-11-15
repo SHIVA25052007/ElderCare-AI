@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
+import { useModalAccessibility } from '../hooks/useModalAccessibility';
 import { voiceAssistantService } from '../services/speechService';
 import { audioService } from '../services/audioService';
 import {
@@ -29,6 +30,13 @@ export const VoiceAssistantModal: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const isSpeechSupported = voiceAssistantService.isSpeechSupported();
+
+  const handleClose = () => {
+    audioService.stopSpeaking();
+    closeVoiceAssistant();
+  };
+
+  const modalRef = useModalAccessibility(isVoiceAssistantOpen, handleClose);
 
   useEffect(() => {
     if (isVoiceAssistantOpen) {
@@ -105,31 +113,37 @@ export const VoiceAssistantModal: React.FC = () => {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-navy-950/85 backdrop-blur-md">
-      <div className="relative w-full max-w-xl bg-navy-900 border border-teal-500/40 rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+      <div
+        ref={modalRef}
+        tabIndex={-1}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="voice-assistant-title"
+        aria-describedby="voice-assistant-desc"
+        className="relative w-full max-w-xl bg-navy-900 border border-teal-500/40 rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 focus:outline-none"
+      >
         
         {/* Header */}
         <div className="p-5 bg-navy-850 border-b border-navy-750 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-teal-500 to-cyan-500 flex items-center justify-center text-navy-950 shadow-glow-teal">
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-teal-500 to-cyan-500 flex items-center justify-center text-navy-950 shadow-glow-teal" aria-hidden="true">
               <Bot className="w-6 h-6" />
             </div>
             <div>
-              <h3 className="text-lg font-bold text-white flex items-center gap-2">
+              <h3 id="voice-assistant-title" className="text-lg font-bold text-white flex items-center gap-2">
                 <span>ElderCare Voice Assistant</span>
                 <span className="text-[10px] px-2 py-0.5 rounded-full bg-teal-500/20 text-teal-300 font-bold uppercase">
                   Web Speech AI
                 </span>
               </h3>
-              <p className="text-xs text-slate-400">Senior-friendly voice interaction</p>
+              <p id="voice-assistant-desc" className="text-xs text-slate-400">Senior-friendly voice interaction</p>
             </div>
           </div>
 
           <button
-            onClick={() => {
-              audioService.stopSpeaking();
-              closeVoiceAssistant();
-            }}
-            className="p-2 text-slate-400 hover:text-white rounded-xl hover:bg-navy-800 transition-colors"
+            onClick={handleClose}
+            className="p-2 text-slate-400 hover:text-white rounded-xl hover:bg-navy-800 transition-colors focus:outline-none focus:ring-2 focus:ring-teal-400"
+            aria-label="Close Voice Assistant Dialog"
           >
             <X className="w-5 h-5" />
           </button>
@@ -141,7 +155,7 @@ export const VoiceAssistantModal: React.FC = () => {
           {/* Waveform / Visualizer */}
           <div className="flex flex-col items-center justify-center p-6 rounded-2xl bg-navy-950/70 border border-navy-800 text-center relative overflow-hidden">
             {/* Visualizer bars */}
-            <div className="flex items-center justify-center gap-1.5 h-12 mb-4">
+            <div className="flex items-center justify-center gap-1.5 h-12 mb-4" aria-hidden="true">
               {[40, 70, 30, 90, 60, 100, 50, 80, 45, 95, 35].map((h, i) => (
                 <div
                   key={i}
