@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
+import { useModalAccessibility } from '../hooks/useModalAccessibility';
 import { DEMO_USERS } from '../services/storage';
 import { isFirebaseConfigured } from '../services/firebaseConfig';
 import {
@@ -25,6 +26,8 @@ export const AuthModal: React.FC = () => {
   const [password, setPassword] = useState('');
   const [selectedRole, setSelectedRole] = useState<UserRole>('elderly');
   const [authSuccessMsg, setAuthSuccessMsg] = useState<string | null>(null);
+
+  const modalRef = useModalAccessibility(isAuthModalOpen, closeAuthModal);
 
   if (!isAuthModalOpen) return null;
 
@@ -52,32 +55,45 @@ export const AuthModal: React.FC = () => {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-navy-950/85 backdrop-blur-md">
-      <div className="relative w-full max-w-lg bg-navy-900 border border-teal-500/40 rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+      <div
+        ref={modalRef}
+        tabIndex={-1}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="auth-modal-title"
+        aria-describedby="auth-modal-desc"
+        className="relative w-full max-w-lg bg-navy-900 border border-teal-500/40 rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 focus:outline-none"
+      >
         
         {/* Header */}
         <div className="p-6 bg-navy-850 border-b border-navy-750 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-teal-500/20 text-teal-300 flex items-center justify-center border border-teal-500/30">
+            <div className="w-10 h-10 rounded-2xl bg-teal-500/20 text-teal-300 flex items-center justify-center border border-teal-500/30" aria-hidden="true">
               <KeyRound className="w-5 h-5 text-teal-400" />
             </div>
             <div>
-              <h3 className="text-lg font-bold text-white">Authentication & Roles</h3>
-              <p className="text-xs text-slate-400">Select user persona or log in</p>
+              <h3 id="auth-modal-title" className="text-lg font-bold text-white">Authentication & Roles</h3>
+              <p id="auth-modal-desc" className="text-xs text-slate-400">Select user persona or log in</p>
             </div>
           </div>
           <button
             onClick={closeAuthModal}
-            className="p-2 text-slate-400 hover:text-white rounded-xl hover:bg-navy-800 transition-colors"
+            className="p-2 text-slate-400 hover:text-white rounded-xl hover:bg-navy-800 transition-colors focus:outline-none focus:ring-2 focus:ring-teal-400"
+            aria-label="Close Authentication Dialog"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Tab Toggle */}
-        <div className="flex border-b border-navy-800 bg-navy-950/50 p-2 gap-2">
+        <div role="tablist" aria-label="Authentication modes" className="flex border-b border-navy-800 bg-navy-950/50 p-2 gap-2">
           <button
+            role="tab"
+            aria-selected={activeTab === 'demo'}
+            aria-controls="demo-tab-panel"
+            id="demo-tab"
             onClick={() => setActiveTab('demo')}
-            className={`flex-1 py-2 rounded-xl text-xs font-bold transition-colors ${
+            className={`flex-1 py-2 rounded-xl text-xs font-bold transition-colors focus:outline-none focus:ring-2 focus:ring-teal-400 ${
               activeTab === 'demo'
                 ? 'bg-navy-800 text-teal-300 border border-teal-500/30 shadow'
                 : 'text-slate-400 hover:text-slate-200'
@@ -86,8 +102,12 @@ export const AuthModal: React.FC = () => {
             ⚡ Quick Demo Personas
           </button>
           <button
+            role="tab"
+            aria-selected={activeTab === 'custom'}
+            aria-controls="custom-tab-panel"
+            id="custom-tab"
             onClick={() => setActiveTab('custom')}
-            className={`flex-1 py-2 rounded-xl text-xs font-bold transition-colors ${
+            className={`flex-1 py-2 rounded-xl text-xs font-bold transition-colors focus:outline-none focus:ring-2 focus:ring-teal-400 ${
               activeTab === 'custom'
                 ? 'bg-navy-800 text-teal-300 border border-teal-500/30 shadow'
                 : 'text-slate-400 hover:text-slate-200'
@@ -106,7 +126,7 @@ export const AuthModal: React.FC = () => {
           )}
 
           {activeTab === 'demo' ? (
-            <div className="space-y-3">
+            <div id="demo-tab-panel" role="tabpanel" aria-labelledby="demo-tab" className="space-y-3">
               <p className="text-xs text-slate-300">
                 Choose a role to test role-tailored dashboards and permissions:
               </p>
@@ -159,7 +179,7 @@ export const AuthModal: React.FC = () => {
               })}
             </div>
           ) : (
-            <form onSubmit={handleCustomSubmit} className="space-y-4">
+            <form id="custom-tab-panel" role="tabpanel" aria-labelledby="custom-tab" onSubmit={handleCustomSubmit} className="space-y-4">
               <div className="p-3 rounded-xl bg-navy-850 border border-navy-750 text-xs text-slate-300 flex items-start gap-2">
                 <Info className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
                 <span>
