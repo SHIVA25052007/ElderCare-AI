@@ -23,6 +23,7 @@ export const FamilyDashboard: React.FC = () => {
   const {
     seniorProfile,
     medications,
+    medicationLogs,
     todayLogs,
     careNotes,
     addCareNote,
@@ -39,11 +40,19 @@ export const FamilyDashboard: React.FC = () => {
   const [noteCategory, setNoteCategory] = useState<'general' | 'mood' | 'nutrition' | 'activity'>('general');
   const [showNoteForm, setShowNoteForm] = useState(false);
 
-  // Adherence calculation
+  // Dynamic adherence calculation from actual medication logs
   const takenCount = todayLogs.filter(l => l.status === 'taken').length;
   const missedCount = todayLogs.filter(l => l.status === 'missed').length;
   const totalScheduled = todayLogs.length;
-  const adherenceRate = 92; // Realistic 7-day adherence benchmark
+
+  // Calculate actual compliance: ratio of taken to all resolved (taken + missed) doses
+  // Safe handling for empty logs and zero scheduled doses
+  const resolvedLogs = medicationLogs.filter(l => l.status === 'taken' || l.status === 'missed');
+  const adherenceRate = resolvedLogs.length > 0
+    ? Math.round((resolvedLogs.filter(l => l.status === 'taken').length / resolvedLogs.length) * 100)
+    : (medicationLogs.length > 0
+        ? Math.round((medicationLogs.filter(l => l.status === 'taken').length / medicationLogs.length) * 100)
+        : 100);
 
   // Low stock medications
   const lowStockMeds = medications.filter(m => m.remainingQuantity <= m.refillThreshold);

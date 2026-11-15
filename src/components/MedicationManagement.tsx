@@ -14,11 +14,14 @@ import {
   RefreshCw,
   Sparkles,
   AlertCircle,
-  HelpCircle
+  HelpCircle,
+  Lock
 } from 'lucide-react';
 
 export const MedicationManagement: React.FC = () => {
   const {
+    currentUser,
+    hasPermission,
     medications,
     todayLogs,
     addMedication,
@@ -27,6 +30,10 @@ export const MedicationManagement: React.FC = () => {
     recordDose,
     requestRefill
   } = useApp();
+
+  const canAddPrescription = hasPermission('prescriptions:add');
+  const canEditPrescription = hasPermission('prescriptions:edit');
+  const canDeletePrescription = hasPermission('prescriptions:delete');
 
   const [searchQuery, setSearchQuery] = useState('');
   const [filterTime, setFilterTime] = useState<string>('all');
@@ -92,6 +99,10 @@ export const MedicationManagement: React.FC = () => {
     if (!name.trim() || !dosage.trim()) return;
 
     if (editingMedId) {
+      if (!canEditPrescription) {
+        alert('Permission Denied: Only authorized clinical caregivers can edit prescriptions.');
+        return;
+      }
       updateMedication(editingMedId, {
         name,
         genericName,
@@ -109,6 +120,10 @@ export const MedicationManagement: React.FC = () => {
         foodRequirement
       });
     } else {
+      if (!canAddPrescription) {
+        alert('Permission Denied: Only authorized clinical caregivers can create prescriptions.');
+        return;
+      }
       addMedication({
         name,
         genericName,
@@ -133,6 +148,10 @@ export const MedicationManagement: React.FC = () => {
   };
 
   const handleDelete = (id: string, medName: string) => {
+    if (!canDeletePrescription) {
+      alert('Permission Denied: Only authorized clinical caregivers can discontinue prescriptions.');
+      return;
+    }
     if (window.confirm(`Are you sure you want to discontinue and remove ${medName}?`)) {
       deleteMedication(id);
     }
@@ -168,13 +187,20 @@ export const MedicationManagement: React.FC = () => {
           </p>
         </div>
 
-        <button
-          onClick={openAddModal}
-          className="px-5 py-3 rounded-2xl bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-400 hover:to-cyan-400 text-navy-950 font-black text-xs uppercase tracking-wider shadow-glow-teal flex items-center justify-center gap-2 transition-all self-start sm:self-auto"
-        >
-          <Plus className="w-4 h-4 stroke-[3]" />
-          <span>Add New Medication</span>
-        </button>
+        {canAddPrescription ? (
+          <button
+            onClick={openAddModal}
+            className="px-5 py-3 rounded-2xl bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-400 hover:to-cyan-400 text-navy-950 font-black text-xs uppercase tracking-wider shadow-glow-teal flex items-center justify-center gap-2 transition-all self-start sm:self-auto"
+          >
+            <Plus className="w-4 h-4 stroke-[3]" />
+            <span>Add New Medication</span>
+          </button>
+        ) : (
+          <div className="px-3.5 py-2 rounded-xl bg-navy-850 border border-navy-750 text-xs text-slate-400 flex items-center gap-2 self-start sm:self-auto">
+            <Lock className="w-3.5 h-3.5 text-slate-500" />
+            <span>Prescription Creation: Caregiver Only</span>
+          </div>
+        )}
       </div>
 
       {/* Search & Filter Bar */}

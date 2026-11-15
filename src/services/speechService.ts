@@ -161,13 +161,27 @@ class VoiceAssistantService {
   }
 
   /**
-   * Process senior voice commands into structured responses
+   * Process senior voice commands into structured responses with clinical safety guards
    */
   public processCommand(commandText: string): VoiceAssistantAction {
     const text = commandText.toLowerCase().trim();
 
-    // 1. Emergency / SOS
-    if (
+    if (!text) {
+      return {
+        type: 'general_help',
+        spokenResponse: 'Hello Margaret! I am your ElderCare AI Assistant. How can I help you today?'
+      };
+    }
+
+    // Helper functions for clinical safety
+    const hasNegation = /\b(not|never|didn't|did not|haven't|have not|don't|do not|no|won't|can't|cannot)\b/i.test(text);
+    const isQuestionOrQuery = (
+      text.includes('?') ||
+      /\b(did i|have i|do i|when do i|what do i|what are|show my|should i|am i supposed to|has|how many|which)\b/i.test(text)
+    );
+
+    // 1. Emergency / SOS (with negation safety check so "no emergency" or "not having chest pain" doesn't falsely trigger)
+    const isSOSKeyword = (
       text.includes('emergency') ||
       text.includes('sos') ||
       text.includes('help me') ||
@@ -175,69 +189,23 @@ class VoiceAssistantService {
       text.includes('i fell') ||
       text.includes('fallen') ||
       text.includes('chest pain')
-    ) {
+    );
+
+    if (isSOSKeyword) {
+      if (hasNegation && (text.includes('not an emergency') || text.includes('no emergency') || text.includes('not having chest pain') || text.includes('did not fall') || text.includes("didn't fall"))) {
+        return {
+          type: 'general_help',
+          spokenResponse: 'Understood, Margaret. I noted that you are not in an emergency. Please let me know if you need any other assistance.'
+        };
+      }
+
       return {
         type: 'trigger_sos',
         spokenResponse: 'Emergency assistance requested. Opening Emergency SOS protocol right away.'
       };
     }
 
-    // 2. Medications check
-    if (
-      text.includes('medication') ||
-      text.includes('medicine') ||
-      text.includes('pill') ||
-      text.includes('what do i take') ||
-      text.includes('schedule')
-    ) {
-      const todayLogs = storageService.getTodayLogs();
-      const takenCount = todayLogs.filter(l => l.status === 'taken').length;
-      const pendingCount = todayLogs.filter(l => l.status === 'pending').length;
-      const pendingMeds = todayLogs.filter(l => l.status === 'pending');
-
-      let response = '';
-      if (pendingCount === 0) {
-        response = `Great job, Margaret! You have taken all your scheduled medications for today.`;
-      } else {
-        const nextMed = pendingMeds[0];
-        response = `You have taken ${takenCount} doses today. You still have ${pendingCount} upcoming doses, including ${nextMed.medicationName} scheduled for ${nextMed.scheduledTime}.`;
-      }
-
-      return {
-        type: 'medications_summary',
-        spokenResponse: response,
-        payload: { takenCount, pendingCount }
-      };
-    }
-
-    // 3. Mark Dose As Taken
-    if (
-      text.includes('took my pill') ||
-      text.includes('mark taken') ||
-      text.includes('i took my morning') ||
-      text.includes('took morning') ||
-      text.includes('took medicine')
-    ) {
-      const todayLogs = storageService.getTodayLogs();
-      const pendingLog = todayLogs.find(l => l.status === 'pending');
-
-      if (pendingLog) {
-        storageService.recordDoseStatus(pendingLog.id, 'taken', 'Margaret Vance (Voice)');
-        audioService.playSuccessChime();
-        return {
-          type: 'mark_dose_taken',
-          spokenResponse: `Confirmed! I marked ${pendingLog.medicationName} as taken at ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.`,
-          payload: { logId: pendingLog.id }
-        };
-      } else {
-        return {
-          type: 'mark_dose_taken',
-          spokenResponse: 'All scheduled doses for today have already been marked as taken.'
-        };
-      }
-    }
-
-    // 4. Appointments check
+    // 2. Doctor Appointments check
     if (
       text.includes('appointment') ||
       text.includes('doctor') ||
@@ -261,7 +229,7 @@ class VoiceAssistantService {
       };
     }
 
-    // 5. Vitals check
+    // 3. Vitals & Biometrics check
     if (
       text.includes('vital') ||
       text.includes('blood pressure') ||
@@ -282,6 +250,114 @@ class VoiceAssistantService {
         type: 'vitals_check',
         spokenResponse: response,
         payload: { vitals: latest }
+      };
+    }
+
+    // 4. Medication Intent Handling (Clinical Safety Gates)
+    const isMedicationTopic = (
+      text.includes('medication') ||
+      text.includes('medicine') ||
+      text.includes('pill') ||
+      text.includes('dose') ||
+      text.includes('schedule') ||
+      text.includes('what do i take') ||
+      text.includes('what to take')
+    );
+
+    if (isMedicationTopic) {
+      const todayLogs = storageService.getTodayLogs();
+      const takenLogs = todayLogs.filter(l => l.status === 'taken');
+      const pendingLogs = todayLogs.filter(l => l.status === 'pending');
+
+      // 4A: Negation Statements (e.g., "I did not take my pill", "I never took my medicine")
+      // NEVER mutate records on negative statements!
+      if (hasNegation) {
+        return {
+          type: 'medications_summary',
+          spokenResponse: `Understood, Margaret. Your scheduled doses remain marked as pending. You currently have ${pendingLogs.length} pending doses for today. Please take them with food and water when you are ready.`,
+          payload: { takenCount: takenLogs.length, pendingCount: pendingLogs.length }
+        };
+      }
+
+      // 4B: Questions & Information Inquiries (e.g., "Did I take my morning pill?", "Have I taken my medicine?", "What medications do I take today?")
+      // NEVER mutate records on questions or queries!
+      if (isQuestionOrQuery) {
+        // Specific query about morning medications
+        if (text.includes('morning')) {
+          const morningTaken = takenLogs.filter(l => l.timeOfDay === 'Morning');
+          const morningPending = pendingLogs.filter(l => l.timeOfDay === 'Morning');
+
+          if (morningPending.length === 0 && morningTaken.length > 0) {
+            return {
+              type: 'medications_summary',
+              spokenResponse: `Yes, Margaret. You have taken your morning medications: ${morningTaken.map(l => l.medicationName).join(' and ')}. Your next upcoming dose is scheduled for later today.`,
+              payload: { morningTaken, morningPending }
+            };
+          } else if (morningPending.length > 0) {
+            return {
+              type: 'medications_summary',
+              spokenResponse: `You still have ${morningPending.length} pending morning dose: ${morningPending.map(l => l.medicationName).join(', ')}.`,
+              payload: { morningTaken, morningPending }
+            };
+          }
+        }
+
+        // General medication overview
+        if (pendingLogs.length === 0) {
+          return {
+            type: 'medications_summary',
+            spokenResponse: `Great job, Margaret! You have taken all your scheduled medications for today.`,
+            payload: { takenCount: takenLogs.length, pendingCount: 0 }
+          };
+        } else {
+          const nextMed = pendingLogs[0];
+          return {
+            type: 'medications_summary',
+            spokenResponse: `You have taken ${takenLogs.length} doses today. You still have ${pendingLogs.length} upcoming doses, including ${nextMed.medicationName} scheduled for ${nextMed.scheduledTime}.`,
+            payload: { takenCount: takenLogs.length, pendingCount: pendingLogs.length }
+          };
+        }
+      }
+
+      // 4C: Explicit Affirmative Confirmation (e.g., "I took my morning pill", "Mark my morning pills as taken", "I took my medicine")
+      // Only execute mutation if the user explicitly asserts that the dose has been taken!
+      const isAffirmativeConfirmation = (
+        /\b(i took|i've taken|i have taken|mark (my )?(morning |afternoon |evening |night )?pills? as taken|mark taken|confirm (my )?dose taken|i swallowed (my )?pill)\b/i.test(text)
+      );
+
+      if (isAffirmativeConfirmation) {
+        // Target specific time of day if requested
+        let targetLog = pendingLogs[0];
+        if (text.includes('morning')) {
+          targetLog = pendingLogs.find(l => l.timeOfDay === 'Morning') || targetLog;
+        } else if (text.includes('afternoon')) {
+          targetLog = pendingLogs.find(l => l.timeOfDay === 'Afternoon') || targetLog;
+        } else if (text.includes('evening')) {
+          targetLog = pendingLogs.find(l => l.timeOfDay === 'Evening') || targetLog;
+        } else if (text.includes('night')) {
+          targetLog = pendingLogs.find(l => l.timeOfDay === 'Night') || targetLog;
+        }
+
+        if (targetLog) {
+          storageService.recordDoseStatus(targetLog.id, 'taken', 'Margaret Vance (Voice)');
+          audioService.playSuccessChime();
+          return {
+            type: 'mark_dose_taken',
+            spokenResponse: `Confirmed! I marked ${targetLog.medicationName} as taken at ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.`,
+            payload: { logId: targetLog.id }
+          };
+        } else {
+          return {
+            type: 'mark_dose_taken',
+            spokenResponse: 'All scheduled doses for today have already been marked as taken.'
+          };
+        }
+      }
+
+      // 4D: Ambiguous medication statement (e.g. just saying "my pill" or "morning medicine")
+      return {
+        type: 'general_help',
+        spokenResponse: 'Would you like to check today\'s medication schedule, or confirm that you have taken a dose? You can say "What medications do I take?" or "I took my morning pill".'
       };
     }
 
