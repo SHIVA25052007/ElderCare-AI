@@ -7,6 +7,7 @@ export interface UserProfile {
   email: string;
   phone: string;
   avatar: string;
+  isAuthorizedProxy?: boolean;
   relationshipToSenior?: string;
   title?: string;
 }

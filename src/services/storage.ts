@@ -11,6 +11,7 @@ import {
   UserProfile,
   DoseStatus
 } from '../types';
+import { rbacService } from './rbacService';
 
 const STORAGE_KEYS = {
   CURRENT_USER: 'eldercare_current_user',
@@ -53,6 +54,7 @@ export const DEMO_USERS: UserProfile[] = [
     email: 'sarah.vance@example.com',
     phone: '(555) 234-5678',
     avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&q=80&w=256',
+    isAuthorizedProxy: true,
     relationshipToSenior: 'Daughter & Primary Healthcare Proxy',
     title: 'Family Care Proxy'
   },
@@ -465,12 +467,12 @@ function getFromStorage<T>(key: string, defaultValue: T): T {
     const raw = localStorage.getItem(key);
     if (!raw) {
       localStorage.setItem(key, JSON.stringify(defaultValue));
-      return defaultValue;
+      return JSON.parse(JSON.stringify(defaultValue)) as T;
     }
     return JSON.parse(raw) as T;
   } catch (e) {
     console.error(`Error loading key ${key} from storage:`, e);
-    return defaultValue;
+    return JSON.parse(JSON.stringify(defaultValue)) as T;
   }
 }
 
@@ -506,7 +508,24 @@ export const storageService = {
     return getFromStorage<SeniorProfile>(STORAGE_KEYS.SENIOR_PROFILE, INITIAL_SENIOR_PROFILE);
   },
 
-  updateSeniorProfile(profile: Partial<SeniorProfile>): SeniorProfile {
+  updateSeniorProfile(profile: Partial<SeniorProfile>, actor?: UserProfile): SeniorProfile {
+    const user = actor || this.getCurrentUser();
+
+    // Check DNR editing permission
+    if (profile.dnrStatus !== undefined) {
+      rbacService.assertPermission(user, 'dnr:edit');
+    }
+
+    // Check Medical ID editing permission
+    const isMedicalIdChange = profile.bloodType !== undefined ||
+      profile.allergies !== undefined ||
+      profile.chronicConditions !== undefined ||
+      profile.preferredHospital !== undefined;
+
+    if (isMedicalIdChange) {
+      rbacService.assertPermission(user, 'medical_id:edit');
+    }
+
     const current = this.getSeniorProfile();
     const updated = { ...current, ...profile };
     saveToStorage(STORAGE_KEYS.SENIOR_PROFILE, updated);
@@ -522,11 +541,14 @@ export const storageService = {
     return this.getMedications().find(m => m.id === id);
   },
 
-  addMedication(med: Omit<Medication, 'id'>): Medication {
+  addMedication(med: Omit<Medication, 'id'>, actor?: UserProfile): Medication {
+    const user = actor || this.getCurrentUser();
+    rbacService.assertPermission(user, 'prescriptions:add');
+
     const meds = this.getMedications();
     const newMed: Medication = {
       ...med,
-      id: `med_${Date.now()}`
+      id: `med_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`
     };
     meds.push(newMed);
     saveToStorage(STORAGE_KEYS.MEDICATIONS, meds);
@@ -552,7 +574,10 @@ export const storageService = {
     return newMed;
   },
 
-  updateMedication(id: string, updates: Partial<Medication>): Medication | null {
+  updateMedication(id: string, updates: Partial<Medication>, actor?: UserProfile): Medication | null {
+    const user = actor || this.getCurrentUser();
+    rbacService.assertPermission(user, 'prescriptions:edit');
+
     const meds = this.getMedications();
     const index = meds.findIndex(m => m.id === id);
     if (index === -1) return null;
@@ -561,7 +586,10 @@ export const storageService = {
     return meds[index];
   },
 
-  deleteMedication(id: string): boolean {
+  deleteMedication(id: string, actor?: UserProfile): boolean {
+    const user = actor || this.getCurrentUser();
+    rbacService.assertPermission(user, 'prescriptions:delete');
+
     const meds = this.getMedications().filter(m => m.id !== id);
     saveToStorage(STORAGE_KEYS.MEDICATIONS, meds);
     return true;
@@ -600,35 +628,59 @@ export const storageService = {
     const index = logs.findIndex(l => l.id === logId);
     if (index === -1) return null;
 
+    const previousStatus = logs[index].status;
+
     logs[index] = {
       ...logs[index],
       status,
       recordedAt: new Date().toISOString(),
       recordedBy,
-      notes: notes || logs[index].notes
+      notes: notes !== undefined ? notes : logs[index].notes
     };
 
     saveToStorage(STORAGE_KEYS.MEDICATION_LOGS, logs);
 
-    // If taken, decrement medication remainingQuantity
-    if (status === 'taken') {
-      const meds = this.getMedications();
-      const medIndex = meds.findIndex(m => m.id === logs[index].medicationId);
-      if (medIndex !== -1 && meds[medIndex].remainingQuantity > 0) {
-        meds[medIndex].remainingQuantity -= 1;
-        // Check if low
-        if (meds[medIndex].remainingQuantity <= meds[medIndex].refillThreshold) {
-          this.addNotification({
-            title: 'Medication Low Warning',
-            message: `${meds[medIndex].name} has only ${meds[medIndex].remainingQuantity} doses remaining. Time to reorder.`,
-            type: 'refill_alert',
-            priority: 'high'
-          });
+    // Clinical Inventory Integrity:
+    // Only adjust remainingQuantity when transitioning across the 'taken' boundary!
+    const meds = this.getMedications();
+    const medIndex = meds.findIndex(m => m.id === logs[index].medicationId);
+
+    if (medIndex !== -1) {
+      let stockChanged = false;
+
+      // Transition TO 'taken' from a non-taken status (deduct stock exactly once)
+      if (status === 'taken' && previousStatus !== 'taken') {
+        if (meds[medIndex].remainingQuantity > 0) {
+          meds[medIndex].remainingQuantity -= 1;
+          stockChanged = true;
+
+          // Trigger low-stock alert if threshold reached
+          if (meds[medIndex].remainingQuantity <= meds[medIndex].refillThreshold) {
+            this.addNotification({
+              title: 'Medication Low Warning',
+              message: `${meds[medIndex].name} has only ${meds[medIndex].remainingQuantity} doses remaining. Time to reorder.`,
+              type: 'refill_alert',
+              priority: 'high'
+            });
+          }
         }
+      }
+      // Transition FROM 'taken' back to non-taken ('pending', 'missed', or 'skipped') (restore stock exactly once)
+      else if (previousStatus === 'taken' && status !== 'taken') {
+        meds[medIndex].remainingQuantity = Math.min(
+          meds[medIndex].totalQuantity,
+          meds[medIndex].remainingQuantity + 1
+        );
+        stockChanged = true;
+      }
+
+      if (stockChanged) {
         saveToStorage(STORAGE_KEYS.MEDICATIONS, meds);
       }
-    } else if (status === 'missed') {
-      // Add missed dose notification
+    }
+
+    // Trigger missed dose notification only on newly transitioning to 'missed'
+    if (status === 'missed' && previousStatus !== 'missed') {
       this.addNotification({
         title: 'Missed Dose Alert',
         message: `${logs[index].medicationName} scheduled for ${logs[index].scheduledTime} was marked as missed.`,
